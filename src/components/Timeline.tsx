@@ -88,6 +88,10 @@ export default function Timeline({
               if (loopEnabled && !isRecording) {
                 return 0; // Loop back
               } else {
+                if (playbackTimerRef.current) {
+                  clearInterval(playbackTimerRef.current);
+                  playbackTimerRef.current = null;
+                }
                 setTimeout(() => setIsPlaying(false), 0);
                 return prevIndex;
               }
@@ -96,21 +100,27 @@ export default function Timeline({
           });
         } catch (err) {
           console.error("Playback loop error caught safely:", err);
+          if (playbackTimerRef.current) {
+            clearInterval(playbackTimerRef.current);
+            playbackTimerRef.current = null;
+          }
           setTimeout(() => setIsPlaying(false), 0);
         }
       }, intervalMs);
     } else {
       if (playbackTimerRef.current) {
         clearInterval(playbackTimerRef.current);
+        playbackTimerRef.current = null;
       }
     }
 
     return () => {
       if (playbackTimerRef.current) {
         clearInterval(playbackTimerRef.current);
+        playbackTimerRef.current = null;
       }
     };
-  }, [isPlaying, fps, frames.length, loopEnabled]);
+  }, [isPlaying, fps, frames.length, loopEnabled, isRecording]);
 
   const handlePlayPause = () => {
     setIsPlaying(!isPlaying);

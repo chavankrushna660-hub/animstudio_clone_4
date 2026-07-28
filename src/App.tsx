@@ -1189,20 +1189,14 @@ export default function App() {
   const isDirtyRef = useRef<boolean>(false);
 
   const objectsRef = useRef(objects);
-  useEffect(() => {
-    objectsRef.current = objects;
-  }, [objects]);
+  objectsRef.current = objects;
 
   const autoTweenRef = useRef(autoTween);
-  useEffect(() => {
-    autoTweenRef.current = autoTween;
-  }, [autoTween]);
+  autoTweenRef.current = autoTween;
 
   // Keep a stable reference to the frames array to break the feedback loop during rapid dragging
   const framesRef = useRef(frames);
-  useEffect(() => {
-    framesRef.current = frames;
-  }, [frames]);
+  framesRef.current = frames;
 
   // Synchronize active objects back and forth between active frame and objects dictionary
   useEffect(() => {
@@ -1212,7 +1206,7 @@ export default function App() {
       const currentObjectsStr = JSON.stringify(objectsRef.current);
 
       // Synchronously save any changes from the frame we are leaving before we load the new frame!
-      if (isDirtyRef.current && oldFrameIndex >= 0 && oldFrameIndex < framesRef.current.length) {
+      if (isDirtyRef.current && oldFrameIndex >= 0 && oldFrameIndex < frames.length) {
         setFrames(prev => {
           if (!prev[oldFrameIndex]) return prev;
           const currentFrameObjectsInState = prev[oldFrameIndex].objects || {};
@@ -1227,17 +1221,17 @@ export default function App() {
           return prev;
         });
 
-        if (framesRef.current[oldFrameIndex]) {
-          framesRef.current[oldFrameIndex].objects = JSON.parse(currentObjectsStr);
+        if (frames[oldFrameIndex]) {
+          frames[oldFrameIndex].objects = JSON.parse(currentObjectsStr);
         }
         isDirtyRef.current = false;
       }
 
       // Now fetch and load target frame
-      const targetFrame = framesRef.current[currentFrameIndex];
+      const targetFrame = frames[currentFrameIndex] || framesRef.current[currentFrameIndex];
       if (targetFrame) {
         const frameObjects = targetFrame.objects || {};
-        const activeObjects = autoTweenRef.current ? getInterpolatedObjects(framesRef.current, currentFrameIndex, frameObjects) : frameObjects;
+        const activeObjects = autoTweenRef.current ? getInterpolatedObjects(frames, currentFrameIndex, frameObjects) : frameObjects;
         const frameObjectsStr = JSON.stringify(activeObjects);
 
         setObjects(JSON.parse(frameObjectsStr));
@@ -1247,7 +1241,7 @@ export default function App() {
         return;
       } else if (currentFrameIndex > 0) {
         // Fallback: copy from previous frame if the current frame is empty or undefined
-        const prevFrame = framesRef.current[currentFrameIndex - 1];
+        const prevFrame = frames[currentFrameIndex - 1] || framesRef.current[currentFrameIndex - 1];
         if (prevFrame && prevFrame.objects && Object.keys(prevFrame.objects).length > 0) {
           const copiedObjects = JSON.parse(JSON.stringify(prevFrame.objects));
           const copiedStr = JSON.stringify(copiedObjects);
@@ -1349,7 +1343,7 @@ export default function App() {
       return () => clearTimeout(handler);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentFrameIndex, objects, applyFillForever]);
+  }, [currentFrameIndex, objects, frames, applyFillForever]);
 
   // Export video recorder states
   const [isRecording, setIsRecording] = useState(false);
