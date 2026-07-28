@@ -2937,11 +2937,19 @@ export default function App() {
   // Video Export recorder
   const startRecording = () => {
     const canvas = (document.getElementById('front-vector-canvas') as HTMLCanvasElement) || (document.querySelector('canvas') as HTMLCanvasElement);
-    if (!canvas) return;
+    if (!canvas) {
+      alert("Canvas element not found for video export.");
+      return;
+    }
 
     recordedChunksRef.current = [];
-    const stream = canvas.captureStream(fps);
+    const stream = canvas.captureStream ? canvas.captureStream(fps) : (canvas as any).mozCaptureStream ? (canvas as any).mozCaptureStream(fps) : null;
     
+    if (!stream) {
+      alert("Canvas video stream capture is not supported in this browser environment.");
+      return;
+    }
+
     // Check supported types for mp4 vs webm
     let options: MediaRecorderOptions = { mimeType: 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"' };
     let extension = 'mp4';
@@ -2973,7 +2981,6 @@ export default function App() {
       } catch (err) {
         console.warn("Failed to initialize MediaRecorder with options, falling back to default constructor", err);
         mediaRecorder = new MediaRecorder(stream);
-        // Fall back extension determination based on simple check
         if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/mp4')) {
           extension = 'mp4';
         } else {
@@ -2987,32 +2994,90 @@ export default function App() {
         }
       };
 
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: options.mimeType || 'video/mp4' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Animation_Export_${Date.now()}.${extension}`;
-        document.body.appendChild(a);
-        a.click();
-        URL.revokeObjectURL(url);
+      mediaRecorder.onstop = async () => {
         setIsRecording(false);
+        const chunks = recordedChunksRef.current;
+        if (!chunks || chunks.length === 0) {
+          setLimitNotification("Notice: No video frame data was captured during export.");
+          return;
+        }
+
+        const mimeType = options.mimeType || 'video/mp4';
+        const blob = new Blob(chunks, { type: mimeType });
+        const fileName = `AnimStudio_Export_${Date.now()}.${extension}`;
+
+        // 1. Try Native Device File System Access API (showSaveFilePicker)
+        if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+          try {
+            const handle = await (window as any).showSaveFilePicker({
+              suggestedName: fileName,
+              types: [{
+                description: 'Animation Video File',
+                accept: { [mimeType]: [`.${extension}`] }
+              }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            setLimitNotification("Success: Animation video exported & saved directly to your device file manager location!");
+            return;
+          } catch (pickerErr: any) {
+            if (pickerErr.name === 'AbortError') {
+              console.log("User cancelled file save location dialog.");
+              return;
+            }
+            console.warn("Save file picker unavailable or permission denied, falling back to direct browser download:", pickerErr);
+          }
+        }
+
+        // 2. Direct Device Download Fallback (opens file manager download prompt)
+        try {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 1000);
+          setLimitNotification("Success: Animation video exported & saved to your device file manager / gallery!");
+        } catch (downloadErr) {
+          console.error("Export video download error:", downloadErr);
+          alert("Failed to export video file. Please check device browser storage permissions.");
+        }
       };
 
       mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start();
+      mediaRecorder.start(100);
       setIsRecording(true);
-      setIsPlaying(true); // Auto-start play to capture sequence
-    } catch (e) {
-      alert("Recording not supported on this browser context.");
+      setIsPlaying(true); // Auto-start play to capture full sequence
+    } catch (e: any) {
+      console.error("MediaRecorder start failure:", e);
+      alert("Video export recording is not supported in this browser context.");
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (err) {
+        console.error("Error stopping media recorder:", err);
+      }
+    } else {
+      setIsRecording(false);
     }
   };
+
+  // Auto-stop video recording when animation playback finishes reaching the end
+  useEffect(() => {
+    if (isRecording && !isPlaying && currentFrameIndex >= frames.length - 1) {
+      stopRecording();
+    }
+  }, [isRecording, isPlaying, currentFrameIndex, frames.length]);
 
   // Import local JSON project file
   const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3316,24 +3381,41 @@ export default function App() {
 
           <div className="w-[1px] h-6 bg-neutral-800 mx-0.5 shrink-0"></div>
 
-          {/* Record Live MP4 Export */}
+          {/* Record Live MP4 Export / Export Video Button */}
           {isRecording ? (
             <button
               onClick={stopRecording}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-rose-500 text-white font-black text-[9px] sm:text-xs animate-pulse hover:bg-rose-400 transition-colors cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500 text-white font-black text-[9px] sm:text-xs animate-pulse hover:bg-rose-400 transition-colors cursor-pointer shrink-0 shadow-lg shadow-rose-500/20"
+              title="Stop Recording & Save Video to File Manager"
             >
-              <Video className="w-3 h-3 shrink-0" />
-              <span className="inline">STOP</span>
+              <Video className="w-3.5 h-3.5 shrink-0" />
+              <span className="inline uppercase tracking-wider">STOP & EXPORT</span>
             </button>
           ) : (
-            <button
-              onClick={startRecording}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 font-black text-[9px] sm:text-xs transition-colors cursor-pointer shrink-0"
-              title="Record MP4 Animation"
-            >
-              <Video className="w-3 h-3 shrink-0" />
-              <span className="inline">REC</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={startRecording}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 font-black text-[9px] sm:text-xs transition-colors cursor-pointer shrink-0"
+                title="Record Animation Canvas"
+              >
+                <Video className="w-3 h-3 shrink-0" />
+                <span className="inline">REC</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setCurrentFrameIndex(0);
+                  setTimeout(() => {
+                    startRecording();
+                  }, 60);
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 font-black text-[9px] sm:text-xs transition-all cursor-pointer shrink-0 shadow-sm"
+                title="Export Entire Animation Video directly to Device File Manager / Gallery"
+              >
+                <Download className="w-3.5 h-3.5 shrink-0" />
+                <span className="inline uppercase tracking-wider">EXPORT VIDEO</span>
+              </button>
+            </div>
           )}
 
           <div className="w-[1px] h-6 bg-neutral-800 mx-0.5 shrink-0"></div>

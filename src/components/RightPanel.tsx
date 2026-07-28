@@ -1498,10 +1498,14 @@ export default function RightPanel({
       return;
     }
     
-    const F = Math.round(durationSeconds * fps);
+    let F = Math.round(durationSeconds * fps);
     if (F < 2) {
       alert("Please select a longer duration or higher FPS to generate at least 2 frames.");
       return;
+    }
+    if (F > 500) {
+      alert("App Safety Guard: Animation generation capped at 500 frames max to ensure high performance.");
+      F = 500;
     }
 
     const startIdx = Math.max(0, Math.min(singleStartFrame, frames.length - 1));
@@ -1682,10 +1686,14 @@ export default function RightPanel({
       return;
     }
 
-    const F = Math.round(durationSeconds * fps);
+    let F = Math.round(durationSeconds * fps);
     if (F < 2) {
       alert("Please select a longer duration or higher FPS to generate at least 2 frames.");
       return;
+    }
+    if (F > 500) {
+      alert("App Safety Guard: Animation generation capped at 500 frames max to ensure high performance.");
+      F = 500;
     }
 
     const refStart = Math.max(0, Math.min(multiRefStartFrame, frames.length - 1));

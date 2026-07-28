@@ -230,6 +230,10 @@ export default function LeftPanel({
 
   // Advanced Layer operations
   const handleAddLayer = () => {
+    if (layers.length >= 50) {
+      alert("App Safety Guard: Maximum limit is 50 layers per project to maintain high rendering performance.");
+      return;
+    }
     const defaultName = `Layer ${layers.length + 1}`;
     const name = sanitizeString(defaultName) || defaultName;
     const id = `layer_${Date.now()}`;
