@@ -817,14 +817,23 @@ export default function RightPanel({
 
   // Sync default frame limits when frames length changes
   React.useEffect(() => {
-    if (singleEndFrame >= frames.length) {
-      setSingleEndFrame(Math.max(0, frames.length - 1));
-    }
-    if (multiRefEndFrame >= frames.length) {
-      setMultiRefEndFrame(Math.max(0, frames.length - 2));
-    }
-    if (multiEndPosFrame >= frames.length) {
-      setMultiEndPosFrame(Math.max(0, frames.length - 1));
+    if (frames.length > 0) {
+      const targetSingleEnd = Math.max(0, frames.length - 1);
+      if (singleEndFrame >= frames.length && singleEndFrame !== targetSingleEnd) {
+        setSingleEndFrame(targetSingleEnd);
+      }
+      const targetMultiRef = Math.max(0, frames.length - 2);
+      if (multiRefEndFrame >= frames.length && multiRefEndFrame !== targetMultiRef) {
+        setMultiRefEndFrame(targetMultiRef);
+      }
+      const targetMultiPos = Math.max(0, frames.length - 1);
+      if (multiEndPosFrame >= frames.length && multiEndPosFrame !== targetMultiPos) {
+        setMultiEndPosFrame(targetMultiPos);
+      }
+    } else {
+      if (singleEndFrame !== 0) setSingleEndFrame(0);
+      if (multiRefEndFrame !== 0) setMultiRefEndFrame(0);
+      if (multiEndPosFrame !== 0) setMultiEndPosFrame(0);
     }
   }, [frames.length, singleEndFrame, multiRefEndFrame, multiEndPosFrame]);
   

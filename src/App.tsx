@@ -1184,7 +1184,7 @@ export default function App() {
   };
 
   // Ref to track the currently loaded frame index to prevent race conditions & update loops
-  const loadedFrameIndexRef = useRef<number>(0);
+  const loadedFrameIndexRef = useRef<number>(-1);
   const lastSyncedObjectsRef = useRef<string>('');
   const isDirtyRef = useRef<boolean>(false);
 
