@@ -146,6 +146,8 @@ interface RightPanelProps {
   setIgnoreInnerDrawings?: React.Dispatch<React.SetStateAction<boolean>>;
   applyColorFillToSelected?: () => void;
   inverseDeformPoints?: (pts: Point[], obj: VectorObject) => Point[];
+  activeLayerId?: string;
+  historyPush?: () => void;
 }
 
 const isChildInsideParent = (
@@ -226,6 +228,8 @@ export default function RightPanel({
   setIgnoreInnerDrawings,
   applyColorFillToSelected,
   inverseDeformPoints,
+  activeLayerId = 'layer-1',
+  historyPush,
 }: RightPanelProps) {
   // Batch/Smart Controls check state
   const [smartCheckedIds, setSmartCheckedIds] = useState<{ [id: string]: boolean }>({});

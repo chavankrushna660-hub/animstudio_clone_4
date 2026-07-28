@@ -1432,7 +1432,7 @@ export default function CanvasArea({
   autoTween = true,
   bones,
   setBones,
-  activeLayerId,
+  activeLayerId = 'layer-1',
   onionSkinEnabled,
   showBones = true,
   isPlaying,
@@ -2637,7 +2637,8 @@ export default function CanvasArea({
         }
 
         // Smart Gap-Closing Flood Fill for sketchy lines / unclosed stroke regions
-        const smartFillObj = performSmartFloodFill(coords, objects, activeLayerId, fillToolColor, 20);
+        const targetLayerId = activeLayerId || (layers && layers[0] ? layers[0].id : 'layer-1');
+        const smartFillObj = performSmartFloodFill(coords, objects, targetLayerId, fillToolColor, 20);
         if (smartFillObj) {
           setObjects(prev => ({
             ...prev,

@@ -209,7 +209,6 @@ export function performSmartFloodFill(
       id: newId,
       name: `SmartFill_${Object.keys(objects).length + 1}`,
       type: 'shape',
-      shapeType: 'custom',
       points: contour,
       strokeColor: 'transparent',
       strokeWidth: 0,

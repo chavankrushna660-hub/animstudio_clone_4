@@ -338,6 +338,8 @@ export interface CustomVectorDeformNode {
   depth?: number;
   color?: string;
   radius?: number;
+  opacity?: number;
+  blur?: number;
 }
 
 export interface CustomVectorDeformState {

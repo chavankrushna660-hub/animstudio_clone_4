@@ -3577,6 +3577,8 @@ export default function App() {
 
         {/* Right Collapsible Properties, Sliders, Smart Pinned Controls */}
         <RightPanel
+          activeLayerId={activeLayerId}
+          historyPush={historyPush}
           selectedObject={selectedObjectId ? objects[selectedObjectId] : null}
           setSelectedObjectId={setSelectedObjectId}
           updateObject={updateObject}
