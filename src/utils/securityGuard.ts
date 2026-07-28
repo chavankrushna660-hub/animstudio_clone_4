@@ -87,21 +87,18 @@ export function safeJsonParse(jsonString: string): any {
   }
 }
 
-// Main initializer that locks down prototypes and overrides unsafe APIs
+// Main initializer that locks down unsafe APIs and sets up global error handling
 export function runSecurityShield() {
   if (typeof window === 'undefined') return;
 
-  // 1. Lock standard prototypes to prevent Prototype Pollution
-  try {
-    Object.freeze(Object.prototype);
-    Object.freeze(Array.prototype);
-    Object.freeze(String.prototype);
-    Object.freeze(Number.prototype);
-    Object.freeze(Boolean.prototype);
-    console.log("🛡️ Client-side security prototypes frozen successfully.");
-  } catch (e) {
-    console.warn("🛡️ Prototype freezing completed with standard system constraints.");
-  }
+  // 1. Add global error handlers for uncaught exceptions and unhandled promise rejections
+  window.addEventListener('error', (event) => {
+    console.error("🛡️ App Global Error Captured:", event.error || event.message);
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error("🛡️ App Unhandled Promise Rejection Captured:", event.reason);
+  });
 
   // 2. Disable eval() to prevent dynamic script evaluation
   try {

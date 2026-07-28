@@ -318,8 +318,9 @@ export default function RightPanel({
   ]);
 
   React.useEffect(() => {
-    if (lassoPoints && lassoPoints.length >= 3) {
-      if (lassoPoints.length !== prevLassoPointsLengthRef.current) {
+    const activeLasso = (lassoPoints && lassoPoints.length >= 3) ? lassoPoints : (fslPoints && fslPoints.length >= 3 ? fslPoints : null);
+    if (activeLasso) {
+      if (activeLasso.length !== prevLassoPointsLengthRef.current) {
         setLassoSliders({
           translateX: 0,
           translateY: 0,
@@ -334,84 +335,76 @@ export default function RightPanel({
           rotateY: 0,
           perspective: 0
         });
+      }
 
-        // Compute which points/subPaths of which active/unlocked/visible drawings are inside the lasso
-        const map: {
-          [objectId: string]: {
-            points: number[];
-            subPaths: { [subPathIndex: number]: number[] };
-          };
-        } = {};
+      // Compute which points/subPaths of which active/unlocked/visible drawings are strictly inside the lasso
+      const map: {
+        [objectId: string]: {
+          points: number[];
+          subPaths: { [subPathIndex: number]: number[] };
+        };
+      } = {};
 
-        (Object.values(objectsRef.current) as VectorObject[]).forEach(obj => {
-          if (obj.isHidden || obj.isLocked || obj.type === '360_container') return;
+      (Object.values(objectsRef.current) as VectorObject[]).forEach(obj => {
+        if (obj.isHidden || obj.isLocked || obj.type === '360_container') return;
 
-          const localPivot = obj.pivots?.[0] || { localX: 0, localY: 0 };
-          const insideIndices: number[] = [];
-          if (obj.points) {
-            obj.points.forEach((p, idx) => {
-              const wPt = localToWorld(p, obj.transform, localPivot);
-              if (isPointInPolygon(wPt, lassoPoints)) {
-                insideIndices.push(idx);
-              }
-            });
-          }
+        const localPivot = obj.pivots?.[0] || { localX: 0, localY: 0 };
+        const insideIndices: number[] = [];
+        if (obj.points) {
+          obj.points.forEach((p, idx) => {
+            const wPt = localToWorld(p, obj.transform, localPivot);
+            if (isPointInPolygon(wPt, activeLasso)) {
+              insideIndices.push(idx);
+            }
+          });
+        }
 
-          const insideSubPaths: { [subPathIdx: number]: number[] } = {};
-          const allSubs = extractAllSubPaths(obj);
+        const insideSubPaths: { [subPathIdx: number]: number[] } = {};
+        const allSubs = extractAllSubPaths(obj);
 
-          let lassoSumX = 0, lassoSumY = 0;
-          lassoPoints.forEach(p => { lassoSumX += p.x; lassoSumY += p.y; });
-          const lassoCentroid = { x: lassoSumX / (lassoPoints.length || 1), y: lassoSumY / (lassoPoints.length || 1) };
+        allSubs.forEach((sub, subIdx) => {
+          const insideSubIndices: number[] = [];
+          const wPts = sub.map(p => localToWorld(p, obj.transform, localPivot));
 
-          allSubs.forEach((sub, subIdx) => {
-            const insideSubIndices: number[] = [];
-            const wPts = sub.map(p => localToWorld(p, obj.transform, localPivot));
-
-            let subSumX = 0, subSumY = 0;
-            wPts.forEach((wPt, idx) => {
-              subSumX += wPt.x;
-              subSumY += wPt.y;
-              if (isPointInPolygon(wPt, lassoPoints)) {
-                insideSubIndices.push(idx);
-              }
-            });
-
-            const subCentroid = { x: subSumX / (wPts.length || 1), y: subSumY / (wPts.length || 1) };
-            const subCentroidInsideLasso = isPointInPolygon(subCentroid, lassoPoints);
-            const lassoCentroidInsideSub = wPts.length >= 3 && isPointInPolygon(lassoCentroid, wPts);
-            const lassoTouchSub = lassoPoints.some(lp => isPointInPolygon(lp, wPts));
-
-            if (insideSubIndices.length > 0 || subCentroidInsideLasso || lassoCentroidInsideSub || lassoTouchSub) {
-              insideSubPaths[subIdx] = insideSubIndices.length > 0 ? insideSubIndices : sub.map((_, idx) => idx);
+          wPts.forEach((wPt, idx) => {
+            if (isPointInPolygon(wPt, activeLasso)) {
+              insideSubIndices.push(idx);
             }
           });
 
-          if (insideIndices.length > 0 || Object.keys(insideSubPaths).length > 0) {
-            map[obj.id] = {
-              points: insideIndices,
-              subPaths: insideSubPaths
-            };
+          if (insideSubIndices.length > 0) {
+            insideSubPaths[subIdx] = insideSubIndices;
           }
         });
 
-        setGlobalLassoSelectedMap(map);
-      }
+        if (insideIndices.length > 0 || Object.keys(insideSubPaths).length > 0) {
+          map[obj.id] = {
+            points: insideIndices,
+            subPaths: insideSubPaths
+          };
+        }
+      });
+
+      setGlobalLassoSelectedMap(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(map)) return prev;
+        return map;
+      });
     } else {
       setGlobalLassoSelectedMap(prev => Object.keys(prev).length > 0 ? {} : prev);
     }
-    prevLassoPointsLengthRef.current = lassoPoints ? lassoPoints.length : 0;
-  }, [lassoPoints]);
+    prevLassoPointsLengthRef.current = activeLasso ? activeLasso.length : 0;
+  }, [lassoPoints, fslPoints, objects]);
 
   const applyLassoTransformToAllFrames = (type: string, value: number) => {
-    if (!lassoPoints || lassoPoints.length < 3) return;
+    const activeLasso = (lassoPoints && lassoPoints.length >= 3) ? lassoPoints : (fslPoints && fslPoints.length >= 3 ? fslPoints : null);
+    if (!activeLasso) return;
     const map = globalLassoSelectedMap;
     if (Object.keys(map).length === 0) return;
 
     // Calculate lasso center in world coordinates
-    const sumX = lassoPoints.reduce((sum, p) => sum + p.x, 0);
-    const sumY = lassoPoints.reduce((sum, p) => sum + p.y, 0);
-    const lassoCenter = { x: sumX / lassoPoints.length, y: sumY / lassoPoints.length };
+    const sumX = activeLasso.reduce((sum, p) => sum + p.x, 0);
+    const sumY = activeLasso.reduce((sum, p) => sum + p.y, 0);
+    const lassoCenter = { x: sumX / activeLasso.length, y: sumY / activeLasso.length };
 
     // Function to transform a single point
     const transformPointWithLasso = (
@@ -709,51 +702,46 @@ export default function RightPanel({
   };
 
   const handleLassoRecolor = (fillColor?: string, strokeColor?: string) => {
-    if (!lassoPoints || lassoPoints.length < 3) return;
-    const map = globalLassoSelectedMap;
-    if (Object.keys(map).length === 0) return;
+    const activeLasso = (lassoPoints && lassoPoints.length >= 3) ? lassoPoints : (fslPoints && fslPoints.length >= 3 ? fslPoints : null);
+    if (!activeLasso) return;
 
     setObjects(prev => {
       const updated = { ...prev };
-      Object.keys(map).forEach(objId => {
-        const obj = updated[objId];
-        if (!obj) return;
+      (Object.values(updated) as VectorObject[]).forEach(obj => {
+        if (obj.isHidden || obj.isLocked || obj.type === '360_container') return;
+        if (obj.layerId && activeLayerId && obj.layerId !== activeLayerId) return;
 
-        const { points: insidePoints, subPaths: insideSubPaths } = map[objId];
-        const nextSubFills = { ...(obj.subPathFills || {}) };
-        const nextSubStrokes = { ...(obj.subPathStrokes || {}) };
+        const localPivot = obj.pivots?.[0] || { localX: 0, localY: 0 };
+        const worldPts = (obj.points && obj.points.length > 0)
+          ? obj.points.map(p => localToWorld(p, obj.transform, localPivot))
+          : (obj.subPaths ? obj.subPaths.flat().map(p => localToWorld(p, obj.transform, localPivot)) : []);
 
-        if (fillColor) {
-          Object.keys(insideSubPaths).forEach(subIdxStr => {
-            const subIdx = parseInt(subIdxStr, 10);
-            nextSubFills[subIdx] = fillColor;
-          });
-        }
+        if (worldPts.length === 0) return;
 
-        if (strokeColor) {
-          Object.keys(insideSubPaths).forEach(subIdxStr => {
-            const subIdx = parseInt(subIdxStr, 10);
-            nextSubStrokes[subIdx] = {
-              strokeColor,
-              strokeWidth: obj.strokeWidth || 3
-            };
-          });
-        }
+        const boundsObj = calculateBoundingBox(worldPts);
+        const boundsLasso = calculateBoundingBox(activeLasso);
 
-        const totalPoints = obj.points?.length || 0;
-        const allPointsInside = insidePoints.length >= totalPoints && totalPoints > 0;
+        const isBoxOverlap = !(boundsObj.x + boundsObj.width < boundsLasso.x ||
+                               boundsLasso.x + boundsLasso.width < boundsObj.x ||
+                               boundsObj.y + boundsObj.height < boundsLasso.y ||
+                               boundsLasso.y + boundsLasso.height < boundsObj.y);
 
-        updated[objId] = {
+        if (!isBoxOverlap) return;
+
+        const localLassoPoints = activeLasso.map(wp => worldToLocal(wp, obj.transform, localPivot));
+
+        updated[obj.id] = {
           ...obj,
-          fillColor: (fillColor && (allPointsInside || !obj.subPaths?.length)) ? fillColor : obj.fillColor,
-          strokeColor: (strokeColor && (allPointsInside || !obj.subPaths?.length)) ? strokeColor : obj.strokeColor,
-          subPathFills: nextSubFills,
-          subPathStrokes: nextSubStrokes,
-          lassoFills: fillColor ? [...(obj.lassoFills || []), { localLassoPoints: lassoPoints.map(wp => worldToLocal(wp, obj.transform, obj.pivots?.[0] || { localX: 0, localY: 0 })), color: fillColor }] : obj.lassoFills
+          lassoFills: fillColor ? [
+            ...(obj.lassoFills || []),
+            { localLassoPoints, color: fillColor }
+          ] : obj.lassoFills,
+          strokeColor: strokeColor ? strokeColor : obj.strokeColor,
         };
       });
       return updated;
     });
+    if (historyPush) historyPush();
   };
 
   const isLassoActive = (!!lassoPoints && lassoPoints.length >= 3) || !!selectedObject?.lassoDeformState?.active;

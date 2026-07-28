@@ -2544,6 +2544,72 @@ export default function CanvasArea({
     // 8. Fill Bucket Tool logic
     if (activeTool === 'FIL') {
       try {
+        // If an active lasso loop exists, check if click is inside or on the lasso area
+        const activeLasso = (lassoPoints && lassoPoints.length >= 3)
+          ? lassoPoints
+          : (fslPoints && fslPoints.length >= 3 ? fslPoints : null);
+
+        if (activeLasso) {
+          const isInsideLasso = isPointInPolygon(coords, activeLasso);
+          let nearLasso = false;
+          if (!isInsideLasso) {
+            for (let i = 0; i < activeLasso.length; i++) {
+              const p1 = activeLasso[i];
+              const p2 = activeLasso[(i + 1) % activeLasso.length];
+              if (pointToSegmentDistance(coords, p1, p2) < 20) {
+                nearLasso = true;
+                break;
+              }
+            }
+          }
+
+          if (isInsideLasso || nearLasso) {
+            let modifiedAny = false;
+            setObjects(prev => {
+              const updated = { ...prev };
+              (Object.values(updated) as VectorObject[]).forEach(obj => {
+                if (obj.isHidden || obj.isLocked || obj.type === '360_container') return;
+                const targetLayerId = activeLayerId || (layers && layers[0] ? layers[0].id : 'layer-1');
+                if (obj.layerId && obj.layerId !== targetLayerId) return;
+
+                const localPivot = obj.pivots?.[0] || { localX: 0, localY: 0 };
+                const worldPts = (obj.points && obj.points.length > 0)
+                  ? obj.points.map(p => localToWorld(p, obj.transform, localPivot))
+                  : (obj.subPaths ? obj.subPaths.flat().map(p => localToWorld(p, obj.transform, localPivot)) : []);
+
+                if (worldPts.length === 0) return;
+
+                const boundsObj = calculateBoundingBox(worldPts);
+                const boundsLasso = calculateBoundingBox(activeLasso);
+
+                const isBoxOverlap = !(boundsObj.x + boundsObj.width < boundsLasso.x ||
+                                       boundsLasso.x + boundsLasso.width < boundsObj.x ||
+                                       boundsObj.y + boundsObj.height < boundsLasso.y ||
+                                       boundsLasso.y + boundsLasso.height < boundsObj.y);
+
+                if (!isBoxOverlap) return;
+
+                const localLassoPoints = activeLasso.map(wp => worldToLocal(wp, obj.transform, localPivot));
+
+                updated[obj.id] = {
+                  ...obj,
+                  lassoFills: [
+                    ...(obj.lassoFills || []),
+                    { localLassoPoints, color: fillToolColor }
+                  ]
+                };
+                modifiedAny = true;
+              });
+              return updated;
+            });
+
+            if (modifiedAny) {
+              historyPush();
+              return;
+            }
+          }
+        }
+
         const clickedObj = performHitTest(coords);
         if (clickedObj) {
           setSelectedObjectId(clickedObj.id);
@@ -3499,30 +3565,7 @@ export default function CanvasArea({
             }
           }
 
-          // Check if we clicked on a vertex point of the selected drawing outline to reshape!
-          const ptsToUse = (obj.points && obj.points.length > 0) ? obj.points : (obj.subPaths ? obj.subPaths.flat() : []);
-          if (ptsToUse.length > 0) {
-            let clickedVtxIdx = -1;
-            let minVtxDist = 12 / zoomScale;
-            ptsToUse.forEach((pt, idx) => {
-              const worldPt = localToWorld(pt, obj.transform, obj.pivots[0]);
-              const d = distance(coords, worldPt);
-              if (d < minVtxDist) {
-                minVtxDist = d;
-                clickedVtxIdx = idx;
-              }
-            });
-            if (clickedVtxIdx !== -1) {
-              if (!obj.points || obj.points.length === 0) {
-                updateObjectProperties(obj.id, { points: ptsToUse });
-              }
-              setDragMode('meshPoint');
-              setDraggedMeshPointIndex(clickedVtxIdx);
-              setDragStartPoint(coords);
-              return;
-            }
-          }
-
+          // Handle click on bounding box handles or move object as a whole
           const handles = getHandles(obj);
           const clickedHandle = handles.find(h => distance(coords, { x: h.worldX, y: h.worldY }) < 12);
           
@@ -4814,10 +4857,11 @@ export default function CanvasArea({
       }
 
       else if (dragMode === 'rotate') {
+        const pivotObj = obj.pivots?.[0] || { localX: 0, localY: 0 };
         const pivotWorld = localToWorld(
-          { x: obj.pivots[0].localX, y: obj.pivots[0].localY },
+          { x: pivotObj.localX, y: pivotObj.localY },
           obj.transform,
-          obj.pivots[0]
+          pivotObj
         );
         const angleStart = Math.atan2(dragStartPoint.y - pivotWorld.y, dragStartPoint.x - pivotWorld.x);
         const angleCurrent = Math.atan2(coords.y - pivotWorld.y, coords.x - pivotWorld.x);
@@ -4854,10 +4898,11 @@ export default function CanvasArea({
       }
 
       else if (dragMode === 'scale') {
+        const pivotObj = obj.pivots?.[0] || { localX: 0, localY: 0 };
         const pivotWorld = localToWorld(
-          { x: obj.pivots[0].localX, y: obj.pivots[0].localY },
+          { x: pivotObj.localX, y: pivotObj.localY },
           obj.transform,
-          obj.pivots[0]
+          pivotObj
         );
         const initialDist = distance(dragStartPoint, pivotWorld) || 1;
         const currentDist = distance(coords, pivotWorld);
